@@ -29,13 +29,15 @@ module.exports = async (req, res) => {
     });
 
     // --- Caching ---
+    // Default: 120s (2 min) for near real-time updates
+    // Min: 60s, Max: 86400s (24h)
     const cacheSeconds = Math.min(
-      Math.max(parseInt(cache_seconds) || 14400, 1800),
+      Math.max(parseInt(cache_seconds) || 120, 60),
       86400
     );
     res.setHeader(
       "Cache-Control",
-      `public, max-age=${cacheSeconds}, s-maxage=${cacheSeconds}, stale-while-revalidate=${cacheSeconds}`
+      `public, max-age=${cacheSeconds}, s-maxage=${cacheSeconds}, stale-while-revalidate=60`
     );
     res.setHeader("Content-Type", "image/svg+xml");
     res.status(200).send(svg);
