@@ -266,7 +266,7 @@ function renderSpeedometer(data, theme) {
       <text x="${cx}" y="${cy + 26}" text-anchor="middle" class="unit" style="font-size:10px;">KM/H</text>
 
       <!-- Commits label below -->
-      <text x="${cx}" y="${cy + 82}" text-anchor="middle" class="stat-label">${data.totalRecentCommits} COMMITS (RECENT)</text>
+      <text x="${cx}" y="${cy + 82}" text-anchor="middle" class="stat-label">${data.todayCommits} COMMITS TODAY${data.hasGraphQL ? " · " + data.yearTotalContributions + " THIS YEAR" : ""}</text>
     </g>
   `;
 }
