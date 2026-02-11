@@ -291,31 +291,8 @@ async function fetchGitHubData(username, token) {
           )
         : 85;
 
-  // --- Activity burst (for ERS/DRS) ---
-  const now = Date.now();
-  let activityBurst = 0;
-  if (contributions) {
-    const weekTotal = weeklyContributions.reduce(
-      (s, d) => s + d.contributionCount,
-      0
-    );
-    const monthTotal = monthlyContributions.reduce(
-      (s, d) => s + d.contributionCount,
-      0
-    );
-    activityBurst = monthTotal > 0 ? (weekTotal / monthTotal) * 100 : 0;
-  } else {
-    const last7Days = Array.isArray(events)
-      ? events.filter(
-          (e) =>
-            now - new Date(e.created_at).getTime() < 7 * 24 * 60 * 60 * 1000
-        ).length
-      : 0;
-    const last30Days = Array.isArray(events) ? events.length : 0;
-    activityBurst = last30Days > 0 ? (last7Days / last30Days) * 100 : 0;
-  }
-
   // --- Account age ---
+  const now = Date.now();
   const createdAt = new Date(user.created_at);
   const accountAgeDays = Math.floor((now - createdAt) / (1000 * 60 * 60 * 24));
   const accountAgeYears = (accountAgeDays / 365).toFixed(1);
@@ -330,36 +307,46 @@ async function fetchGitHubData(username, token) {
     ? repos.reduce((sum, r) => sum + (r.forks_count || 0), 0)
     : 0;
 
+  // --- Lap time: time between commits ---
+  // We use push events which have timestamps to compute gaps
+  const pushEvents = Array.isArray(events)
+    ? events
+        .filter((e) => e.type === "PushEvent")
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    : [];
+
+  let fastestLapMs = Infinity;
+  let recentLapMs = null;
+  for (let i = 0; i < pushEvents.length - 1; i++) {
+    const gap =
+      new Date(pushEvents[i].created_at) -
+      new Date(pushEvents[i + 1].created_at);
+    if (gap > 0) {
+      if (recentLapMs === null) recentLapMs = gap;
+      if (gap < fastestLapMs) fastestLapMs = gap;
+    }
+  }
+  const fastestLap =
+    fastestLapMs < Infinity ? formatLapTimeMs(fastestLapMs) : "--:--.---";
+  const recentLap =
+    recentLapMs !== null ? formatLapTimeMs(recentLapMs) : "--:--.---";
+
   // --- Map to F1 telemetry ---
-  // Speed: today's commits drive the speedometer (0 commits = 0, 30+ = max)
-  const speed = Math.min(350, Math.round((todayCommits / 30) * 350));
-  const gear = Math.min(8, Math.max(1, Math.ceil(speed / 44)));
-  const lapTime = formatLapTime(streak);
+  // Speed = today's commits (raw number, shown as cm/d — commits per day)
+  const speed = todayCommits;
+  // Gauge fraction: scale for the arc (0 commits = 0, 50+ = full gauge)
+  const speedFraction = Math.min(1, todayCommits / 50);
+
+  // Gear derived from speed: 0→N, 1-5→1, 6-10→2, 11-15→3, ... 30+→7/8
+  const gear =
+    todayCommits === 0
+      ? "N"
+      : Math.min(8, Math.max(1, Math.ceil(todayCommits / 5)));
+
   const tireWear = Math.min(100, Math.round(prMergeRate));
-  const fuelLevel = Math.min(
-    100,
-    Math.round(
-      ((Array.isArray(repos) ? repos.length : 0) /
-        Math.max(1, user.public_repos)) *
-        100
-    )
-  );
-  const ersEnergy = Math.min(100, Math.round(activityBurst * 2.5));
-  const drsActive = activityBurst > 30;
 
-  // Sector times from contribution periods
-  const sector1 = generateSectorTime(todayCommits, 1);
-  const sector2 = generateSectorTime(
-    Array.isArray(repos) ? repos.length : 0,
-    2
-  );
-  const sector3 = generateSectorTime(streak, 3);
-
-  // Position based on relative metrics
-  const position = Math.max(
-    1,
-    Math.min(20, 21 - Math.ceil((speed / 350) * 20))
-  );
+  // DRS: active if > 5 commits today
+  const drsActive = todayCommits > 5;
 
   return {
     username: user.login,
@@ -382,34 +369,27 @@ async function fetchGitHubData(username, token) {
 
     // F1 telemetry
     speed,
+    speedFraction,
     gear,
-    lapTime,
+    fastestLap,
+    recentLap,
     tireWear,
-    fuelLevel,
-    ersEnergy,
     drsActive,
-    sector1,
-    sector2,
-    sector3,
-    position,
   };
 }
 
-function formatLapTime(streak) {
-  const minutes = 1;
-  const seconds = Math.max(5, 45 - streak);
-  const ms = Math.floor(Math.random() * 999);
-  return `${minutes}:${String(seconds).padStart(2, "0")}.${String(ms).padStart(
-    3,
-    "0"
-  )}`;
-}
-
-function generateSectorTime(value, sector) {
-  const base = [28, 24, 21][sector - 1];
-  const variation = Math.max(0, base - Math.min(value, base - 1));
-  const ms = Math.floor(Math.random() * 999);
-  return `${variation}.${String(ms).padStart(3, "0")}`;
+/**
+ * Format milliseconds into a lap-time string M:SS.mmm
+ * Cap display at 59:59.999
+ */
+function formatLapTimeMs(ms) {
+  const totalSec = Math.floor(ms / 1000);
+  const millis = ms % 1000;
+  const minutes = Math.min(59, Math.floor(totalSec / 60));
+  const seconds = totalSec % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}.${String(
+    Math.floor(millis)
+  ).padStart(3, "0")}`;
 }
 
 module.exports = { fetchGitHubData };
