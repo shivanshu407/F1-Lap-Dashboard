@@ -186,16 +186,33 @@ async function fetchGitHubData(username, token) {
     monthlyContributions = sortedDays.slice(0, 30);
 
     // Streak calculation from full calendar (accurate, includes private)
+    // Walk backwards from today, counting consecutive days with contributions
     streak = 0;
-    for (let i = 0; i < sortedDays.length; i++) {
-      const day = sortedDays[i];
-      // Skip today if 0 (day isn't over yet)
-      if (i === 0 && day.contributionCount === 0) continue;
-      if (day.contributionCount > 0) {
+    const todayDate = new Date(todayStr);
+    let checkDate = new Date(todayDate);
+
+    // Build a map for O(1) lookups
+    const dayMap = {};
+    for (const d of allDays) {
+      dayMap[d.date] = d.contributionCount;
+    }
+
+    // If today has 0 contributions, start checking from yesterday
+    // (today isn't over yet, so don't break the streak)
+    if ((dayMap[todayStr] || 0) === 0) {
+      checkDate.setDate(checkDate.getDate() - 1);
+    }
+
+    // Count consecutive days with contributions
+    for (let i = 0; i < 365; i++) {
+      const dateStr = checkDate.toISOString().split("T")[0];
+      const count = dayMap[dateStr] || 0;
+      if (count > 0) {
         streak++;
       } else {
         break;
       }
+      checkDate.setDate(checkDate.getDate() - 1);
     }
 
     // Hour distribution: still from events API (GraphQL doesn't give times)
