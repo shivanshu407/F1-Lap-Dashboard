@@ -1,0 +1,32 @@
+{
+  "name": "f1-lap-dashboard",
+  "version": "1.0.0",
+  "description": "🏎️ Dynamic F1 telemetry-styled SVG card for your GitHub profile README. Visualize your GitHub stats as a Formula 1 dashboard.",
+  "main": "api/card.js",
+  "author": "Shivanshu Mishra <mshivanshu407@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shivanshu407/F1-Lap-Dashboard"
+  },
+  "keywords": [
+    "github",
+    "profile",
+    "readme",
+    "svg",
+    "f1",
+    "formula1",
+    "dashboard",
+    "telemetry",
+    "github-stats",
+    "vercel",
+    "serverless"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "dev": "npx vercel dev",
+    "deploy": "npx vercel --prod"
+  }
+}
