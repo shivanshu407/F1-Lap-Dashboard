@@ -66,23 +66,31 @@ Every F1 team has their colors. Pick yours.
 
 ---
 
-## 📊 What Each Metric Means
+# F1 Lap Dashboard
 
-Your GitHub data is mapped to real F1 telemetry metrics:
+A GitHub activity visualization inspired by Formula 1 telemetry — maps commit/activity data to racing-style metrics and a leaderboard-style dashboard.
 
-| F1 Metric | GitHub Data | How It's Calculated |
+## What Each Metric Means
+
+Your GitHub data is mapped to F1 telemetry metrics as implemented in the code:
+
+| F1 Metric | GitHub Data | How It's Calculated (actual implementation) |
 |---|---|---|
-| 🏎️ **Speed (km/h)** | Recent commits | Commits in last 90 events → mapped to 0-350 km/h |
-| ⚙️ **Gear (1-8)** | Commit intensity | Derived from speed tier |
-| ⏱️ **Lap Time** | Current streak | Streak days → shorter lap time = better |
-| 🏁 **Position (P1-P20)** | Overall activity | Speed-based ranking on a 20-driver grid |
-| 🛞 **Tire Wear** | PR merge rate | % of PRs successfully merged (FL, FR, RL, RR) |
-| ⛽ **Fuel Level** | Repository count | Number of public repos as fuel % |
-| ⚡ **ERS Deploy** | Activity burst | Last 7 days vs last 30 days activity ratio |
-| 🟢 **DRS** | Hot streak | Open = high recent activity, Off = cool period |
-| 📈 **Telemetry Chart** | Commit times | When you code (hour-by-hour UTC distribution) |
-| 📊 **Sector Times** | Mixed metrics | S1: commits, S2: repos, S3: streak |
-| **Interval** | Gap to P1 | Position × 0.847s (the classic F1 gap) |
+| 🏎️ Speed (commits/day) | Today's commits | Raw count of commits detected for today (from events or GraphQL). This number is shown directly as "speed". |
+| ⚙️ Gear (1-8 or N) | Commit intensity | Derived from today's commits: 0 → "N"; otherwise gear = ceil(todayCommits / 5) capped to 8 (so 1–5 commits → gear 1, 6–10 → gear 2, etc.). |
+| ⏱️ Lap Time (fastest / recent) | Time gaps between push events | Computed from consecutive PushEvent timestamps. FastestLap = smallest positive gap; RecentLap = gap between the two most recent push events. Formatted as M:SS.mmm. |
+| 🏁 Position (P1–P20) | Relative speed ranking | (Rendered as a position on a 20-driver grid) derived from activity/speed ranking across users — position is a presentation of relative activity (see code that produces the leaderboard/ranking). |
+| 🛞 Tire Wear (%) | PR merge rate | Tire wear is derived from the PR merge rate (percentage of PRs that were merged) and is clamped to 0–100%. |
+| ⛽ Fuel Level (%) | Repository count / account stats | Fuel visuals are based on account/repo counts and other profile stats (presentation-level mapping). |
+| ⚡ ERS Deploy | Recent activity burst | Computed from short-term vs longer-term activity (e.g., last 7 days vs last 30 days activity ratio). |
+| 🟢 DRS (Open/Off) | Today activity threshold | DRS is considered "active" when today's commits > 5 (true/false flag). |
+| 📈 Telemetry Chart | Commit times | Hour-of-day distribution of PushEvent timestamps (UTC hour buckets) used to show when you code. |
+| 📊 Sector Times (S1/S2/S3) | Mixed metrics | Sector breakdown is a presentation composed from commits, repo counts, and streak data (visual grouping in the card). |
+| Interval / Gap | Gap to leader | The displayed gap uses a position-based time gap conversion (UI presentation uses a multiplier like 0.847s × position). |
+
+Notes:
+- Where possible the server uses GraphQL contributions calendar (full-contribution data including private contributions when a token is present) to compute an accurate streak; otherwise it falls back to events/REST (public-only) and computes streak from the last ~90 days of event dates.
+- The speed gauge arc is scaled using speedFraction = min(1, todayCommits / 50) — 50+ commits fills the gauge.
 
 ---
 
