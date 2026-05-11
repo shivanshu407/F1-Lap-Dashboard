@@ -414,11 +414,11 @@ async function fetchGitHubData(username, token) {
   const drsActive = todayCommits > 5;
 
   // --- Position (P1–P20) ---
-  // Based on weekly commit average: higher activity → better grid position
-  // P1 = 10+ commits/day average, P20 = ~0 activity
+  // Absolute activity scale (not a leaderboard — based on YOUR activity level)
+  // P1 = 7+ commits/day avg, P5 ≈ 5/day, P12 ≈ 3/day, P18 ≈ 1/day, P20 = 0
   const position = Math.max(
     1,
-    Math.min(20, 21 - Math.ceil(Math.min(20, weeklyAvg * 2)))
+    Math.min(20, 21 - Math.floor(Math.min(20, weeklyAvg * 3)))
   );
   const interval =
     position === 1 ? "LEADER" : `+${(position * 0.847).toFixed(3)}`;
