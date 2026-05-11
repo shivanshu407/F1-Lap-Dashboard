@@ -281,10 +281,10 @@ function renderLapTimePanel(data, theme) {
 function renderTireWear(data, theme) {
   const wear = data.tireWear;
   const tires = [
-    { label: "FL", x: 505, y: 75, wear: Math.min(100, wear + 5) },
-    { label: "FR", x: 565, y: 75, wear: Math.min(100, wear + 2) },
-    { label: "RL", x: 505, y: 127, wear: Math.max(0, wear - 3) },
-    { label: "RR", x: 565, y: 127, wear: Math.max(0, wear - 8) },
+    { label: "FL", x: 530, y: 115, wear: Math.min(100, wear + 5) },
+    { label: "FR", x: 590, y: 115, wear: Math.min(100, wear + 2) },
+    { label: "RL", x: 530, y: 167, wear: Math.max(0, wear - 3) },
+    { label: "RR", x: 590, y: 167, wear: Math.max(0, wear - 8) },
   ];
 
   const tireElements = tires
@@ -305,8 +305,8 @@ function renderTireWear(data, theme) {
 
   return `
     <g class="animate-fade-d2">
-      <rect x="495" y="60" width="120" height="118" rx="8" fill="${theme.bgPanel}" opacity="0.5" />
-      <text x="555" y="73" text-anchor="middle" class="label" style="font-size:8px;">TIRE WEAR (PR MERGE)</text>
+      <rect x="520" y="100" width="120" height="118" rx="8" fill="${theme.bgPanel}" opacity="0.5" />
+      <text x="580" y="113" text-anchor="middle" class="label" style="font-size:8px;">TIRE WEAR (PR MERGE)</text>
       ${tireElements}
     </g>
   `;
@@ -317,16 +317,16 @@ function renderDRSIndicator(data, theme) {
   const active = data.drsActive;
   return `
     <g class="animate-fade-d3">
-      <rect x="625" y="60" width="100" height="118" rx="8" fill="${theme.bgPanel}" opacity="0.5" />
-      <text x="675" y="78" text-anchor="middle" class="label" style="font-size:8px;">DRS</text>
+      <rect x="650" y="100" width="100" height="118" rx="8" fill="${theme.bgPanel}" opacity="0.5" />
+      <text x="700" y="118" text-anchor="middle" class="label" style="font-size:8px;">DRS</text>
 
-      <rect x="640" y="87" width="70" height="28" rx="6" fill="${active ? theme.drsActive : theme.drsInactive}" opacity="${active ? 1 : 0.4}" ${active ? 'class="drs-active"' : ""} />
-      <text x="675" y="106" text-anchor="middle" style="font:bold 12px 'Segoe UI',sans-serif;fill:${active ? theme.bg : theme.textSecondary};">${active ? "OPEN" : "CLOSED"}</text>
+      <rect x="665" y="127" width="70" height="28" rx="6" fill="${active ? theme.drsActive : theme.drsInactive}" opacity="${active ? 1 : 0.4}" ${active ? 'class="drs-active"' : ""} />
+      <text x="700" y="146" text-anchor="middle" style="font:bold 12px 'Segoe UI',sans-serif;fill:${active ? theme.bg : theme.textSecondary};">${active ? "OPEN" : "CLOSED"}</text>
 
-      <text x="675" y="132" text-anchor="middle" class="stat-label" style="font-size:7px;">${active ? "5+ COMMITS TODAY" : "NEED 5+ COMMITS"}</text>
+      <text x="700" y="172" text-anchor="middle" class="stat-label" style="font-size:7px;">${active ? "5+ COMMITS TODAY" : "NEED 5+ COMMITS"}</text>
 
-      <rect x="652" y="144" width="46" height="16" rx="4" fill="${active ? theme.accent + "33" : theme.bgSecondary}" />
-      <text x="675" y="156" text-anchor="middle" style="font:bold 9px 'Consolas',monospace;fill:${active ? theme.accent : theme.textSecondary};">${data.todayCommits}/5</text>
+      <rect x="677" y="184" width="46" height="16" rx="4" fill="${active ? theme.accent + "33" : theme.bgSecondary}" />
+      <text x="700" y="196" text-anchor="middle" style="font:bold 9px 'Consolas',monospace;fill:${active ? theme.accent : theme.textSecondary};">${data.todayCommits}/5</text>
     </g>
   `;
 }
