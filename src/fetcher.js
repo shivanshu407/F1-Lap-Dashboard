@@ -163,6 +163,37 @@ async function fetchGitHubData(username, token) {
   let weeklyContributions = []; // last 7 days
   let monthlyContributions = []; // last 30 days
 
+  // --- Helper: count today's activity from REST Events API ---
+  // The Events API sometimes omits the `commits` array from PushEvent payloads,
+  // so we count each PushEvent as at least 1 commit when the array is missing.
+  const allPushEvents = Array.isArray(events)
+    ? events.filter((e) => e.type === "PushEvent")
+    : [];
+
+  function countCommitsFromEvent(event) {
+    if (event.payload?.commits && Array.isArray(event.payload.commits)) {
+      return event.payload.commits.length || 1;
+    }
+    // Events API often omits commits array — count the push itself
+    return 1;
+  }
+
+  // Count today's commits from REST events (always available, real-time)
+  let todayCommitsFromEvents = 0;
+  for (const event of allPushEvents) {
+    const eventDate = event.created_at?.split("T")[0];
+    if (eventDate === todayStr) {
+      todayCommitsFromEvents += countCommitsFromEvent(event);
+    }
+  }
+
+  // Build event-based date set for streak supplementation
+  const eventDates = new Set();
+  for (const event of allPushEvents) {
+    const date = event.created_at?.split("T")[0];
+    if (date) eventDates.add(date);
+  }
+
   if (contributions) {
     // --- GraphQL path: includes private repos ---
     const calendar = contributions.contributionCalendar;
@@ -174,9 +205,11 @@ async function fetchGitHubData(username, token) {
     // Flatten all contribution days
     const allDays = calendar.weeks.flatMap((w) => w.contributionDays);
 
-    // Today's commits
+    // Today's commits: use GraphQL if available, otherwise fall back to events
     const todayEntry = allDays.find((d) => d.date === todayStr);
-    todayCommits = todayEntry ? todayEntry.contributionCount : 0;
+    const todayFromGraphQL = todayEntry ? todayEntry.contributionCount : 0;
+    // Use whichever source has the higher count (GraphQL lags behind real-time)
+    todayCommits = Math.max(todayFromGraphQL, todayCommitsFromEvents);
 
     // Last 7 days & last 30 days contributions
     const sortedDays = [...allDays].sort(
@@ -191,13 +224,29 @@ async function fetchGitHubData(username, token) {
     const todayDate = new Date(todayStr);
     let checkDate = new Date(todayDate);
 
-    // Build a map for O(1) lookups
+    // Build a map for O(1) lookups, merging GraphQL + REST events data
     const dayMap = {};
     for (const d of allDays) {
       dayMap[d.date] = d.contributionCount;
     }
+    // Supplement with REST events — if GraphQL shows 0 for a date but
+    // REST events exist for that date, count the events instead
+    for (const eventDate of eventDates) {
+      if (!dayMap[eventDate] || dayMap[eventDate] === 0) {
+        // Count push events for this date
+        let count = 0;
+        for (const e of allPushEvents) {
+          if (e.created_at?.split("T")[0] === eventDate) {
+            count += countCommitsFromEvent(e);
+          }
+        }
+        if (count > 0) {
+          dayMap[eventDate] = Math.max(dayMap[eventDate] || 0, count);
+        }
+      }
+    }
 
-    // If today has 0 contributions, start checking from yesterday
+    // If today has 0 contributions (even after merging), start from yesterday
     // (today isn't over yet, so don't break the streak)
     if ((dayMap[todayStr] || 0) === 0) {
       checkDate.setDate(checkDate.getDate() - 1);
@@ -216,50 +265,33 @@ async function fetchGitHubData(username, token) {
     }
 
     // Hour distribution: still from events API (GraphQL doesn't give times)
-    const pushEvents = Array.isArray(events)
-      ? events.filter((e) => e.type === "PushEvent")
-      : [];
-    for (const event of pushEvents) {
+    for (const event of allPushEvents) {
       const hour = new Date(event.created_at).getUTCHours();
       hourDistribution[hour]++;
     }
   } else {
     // --- Fallback: REST API only (public commits only, no token) ---
-    const pushEvents = Array.isArray(events)
-      ? events.filter((e) => e.type === "PushEvent")
-      : [];
-    totalCommits = pushEvents.reduce(
-      (sum, e) => sum + (e.payload?.commits?.length || 0),
+    totalCommits = allPushEvents.reduce(
+      (sum, e) => sum + countCommitsFromEvent(e),
       0
     );
 
     // Today's commits from events
-    for (const event of pushEvents) {
-      const eventDate = event.created_at?.split("T")[0];
-      if (eventDate === todayStr) {
-        todayCommits += event.payload?.commits?.length || 0;
-      }
-    }
+    todayCommits = todayCommitsFromEvents;
 
     // Hour distribution
-    for (const event of pushEvents) {
+    for (const event of allPushEvents) {
       const hour = new Date(event.created_at).getUTCHours();
       hourDistribution[hour]++;
     }
 
     // Streak from events
-    const commitDates = new Set();
-    for (const event of pushEvents) {
-      const date = event.created_at?.split("T")[0];
-      if (date) commitDates.add(date);
-    }
-    const sortedDates = [...commitDates].sort().reverse();
     const today = new Date();
     for (let i = 0; i < 90; i++) {
       const d = new Date(today);
       d.setDate(d.getDate() - i);
       const dateStr = d.toISOString().split("T")[0];
-      if (sortedDates.includes(dateStr)) {
+      if (eventDates.has(dateStr)) {
         streak++;
       } else if (i > 0) {
         break;
@@ -331,6 +363,39 @@ async function fetchGitHubData(username, token) {
   const recentLap =
     recentLapMs !== null ? formatLapTimeMs(recentLapMs) : "--:--.---";
 
+  // --- Weekly / Monthly totals (for Position, ERS) ---
+  let weeklyTotal = 0;
+  let monthlyTotal = 0;
+
+  if (weeklyContributions.length > 0) {
+    weeklyTotal = weeklyContributions.reduce(
+      (s, d) => s + (d.contributionCount || 0),
+      0
+    );
+  }
+  if (monthlyContributions.length > 0) {
+    monthlyTotal = monthlyContributions.reduce(
+      (s, d) => s + (d.contributionCount || 0),
+      0
+    );
+  }
+
+  // Fallback: estimate weekly/monthly from REST events if GraphQL was empty
+  if (weeklyTotal === 0 && allPushEvents.length > 0) {
+    const nowMs = Date.now();
+    const sevenDaysAgoMs = nowMs - 7 * 24 * 60 * 60 * 1000;
+    const thirtyDaysAgoMs = nowMs - 30 * 24 * 60 * 60 * 1000;
+    for (const e of allPushEvents) {
+      const t = new Date(e.created_at).getTime();
+      const c = countCommitsFromEvent(e);
+      if (t >= sevenDaysAgoMs) weeklyTotal += c;
+      if (t >= thirtyDaysAgoMs) monthlyTotal += c;
+    }
+  }
+
+  const weeklyAvg = weeklyTotal / 7;
+  const monthlyAvg = monthlyTotal / 30;
+
   // --- Map to F1 telemetry ---
   // Speed = today's commits (raw number, shown as cm/d — commits per day)
   const speed = todayCommits;
@@ -347,6 +412,32 @@ async function fetchGitHubData(username, token) {
 
   // DRS: active if > 5 commits today
   const drsActive = todayCommits > 5;
+
+  // --- Position (P1–P20) ---
+  // Based on weekly commit average: higher activity → better grid position
+  // P1 = 10+ commits/day average, P20 = ~0 activity
+  const position = Math.max(
+    1,
+    Math.min(20, 21 - Math.ceil(Math.min(20, weeklyAvg * 2)))
+  );
+  const interval =
+    position === 1 ? "LEADER" : `+${(position * 0.847).toFixed(3)}`;
+
+  // --- Fuel Level (%) ---
+  // Based on streak continuity: 30-day streak = 100% fuel
+  const fuelLevel = Math.min(100, Math.round((streak / 30) * 100));
+
+  // --- ERS Deployment (%) ---
+  // Burst indicator: recent activity vs long-term average
+  // If 7-day avg >> 30-day avg, you're deploying ERS (activity burst)
+  const ersRatio =
+    monthlyAvg > 0
+      ? weeklyAvg / monthlyAvg
+      : weeklyAvg > 0
+        ? 2
+        : 0;
+  const ersPercent = Math.min(100, Math.round(ersRatio * 50));
+  const ersActive = ersPercent > 60;
 
   return {
     username: user.login,
@@ -375,6 +466,13 @@ async function fetchGitHubData(username, token) {
     recentLap,
     tireWear,
     drsActive,
+    position,
+    interval,
+    fuelLevel,
+    ersPercent,
+    ersActive,
+    weeklyAvg: Math.round(weeklyAvg * 10) / 10,
+    weeklyTotal,
   };
 }
 

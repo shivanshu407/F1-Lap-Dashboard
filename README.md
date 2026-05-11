@@ -16,7 +16,7 @@
 
 <br />
 
-*Commits become speed. Streaks become lap times. Pull requests become tire wear.*
+*Commits become speed. Streaks become fuel. Pull requests become tire wear.*
 *Your entire GitHub activity — rendered as a live F1 cockpit.*
 
 </div>
@@ -66,31 +66,27 @@ Every F1 team has their colors. Pick yours.
 
 ---
 
-# F1 Lap Dashboard
+## 📊 What Each Metric Means
 
-A GitHub activity visualization inspired by Formula 1 telemetry — maps commit/activity data to racing-style metrics and a leaderboard-style dashboard.
+Your GitHub data is mapped to F1 telemetry metrics:
 
-## What Each Metric Means
-
-Your GitHub data is mapped to F1 telemetry metrics as implemented in the code:
-
-| F1 Metric | GitHub Data | How It's Calculated (actual implementation) |
+| F1 Metric | GitHub Data | How It's Calculated |
 |---|---|---|
-| 🏎️ Speed (commits/day) | Today's commits | Raw count of commits detected for today (from events or GraphQL). This number is shown directly as "speed". |
-| ⚙️ Gear (1-8 or N) | Commit intensity | Derived from today's commits: 0 → "N"; otherwise gear = ceil(todayCommits / 5) capped to 8 (so 1–5 commits → gear 1, 6–10 → gear 2, etc.). |
-| ⏱️ Lap Time (fastest / recent) | Time gaps between push events | Computed from consecutive PushEvent timestamps. FastestLap = smallest positive gap; RecentLap = gap between the two most recent push events. Formatted as M:SS.mmm. |
-| 🏁 Position (P1–P20) | Relative speed ranking | (Rendered as a position on a 20-driver grid) derived from activity/speed ranking across users — position is a presentation of relative activity (see code that produces the leaderboard/ranking). |
-| 🛞 Tire Wear (%) | PR merge rate | Tire wear is derived from the PR merge rate (percentage of PRs that were merged) and is clamped to 0–100%. |
-| ⛽ Fuel Level (%) | Repository count / account stats | Fuel visuals are based on account/repo counts and other profile stats (presentation-level mapping). |
-| ⚡ ERS Deploy | Recent activity burst | Computed from short-term vs longer-term activity (e.g., last 7 days vs last 30 days activity ratio). |
-| 🟢 DRS (Open/Off) | Today activity threshold | DRS is considered "active" when today's commits > 5 (true/false flag). |
-| 📈 Telemetry Chart | Commit times | Hour-of-day distribution of PushEvent timestamps (UTC hour buckets) used to show when you code. |
-| 📊 Sector Times (S1/S2/S3) | Mixed metrics | Sector breakdown is a presentation composed from commits, repo counts, and streak data (visual grouping in the card). |
-| Interval / Gap | Gap to leader | The displayed gap uses a position-based time gap conversion (UI presentation uses a multiplier like 0.847s × position). |
+| 🏎️ **Speed** (cm/d) | Today's commits | Raw count of today's commits. Gauge fills at 50+. Uses GraphQL contribution calendar with REST Events API fallback for real-time accuracy. |
+| ⚙️ **Gear** (1–8 or N) | Commit intensity | `0 → N`, otherwise `ceil(todayCommits / 5)` capped at 8. So 1–5 commits → Gear 1, 6–10 → Gear 2, etc. |
+| ⏱️ **Lap Times** | Push event gaps | Computed from consecutive PushEvent timestamps. Fastest = smallest gap. Recent = gap between two most recent pushes. Formatted as `M:SS.mmm`. |
+| 🏁 **Position** (P1–P20) | Weekly activity | Based on 7-day commit average. P1 = 10+ commits/day average. P20 = near zero activity. |
+| 🛞 **Tire Wear** (%) | PR merge rate | Percentage of PRs that were merged, shown across 4 tires (FL/FR/RL/RR) with slight variance for realism. |
+| ⛽ **Fuel Level** (%) | Streak continuity | `min(100, streak / 30 × 100)`. A 30-day streak = 100% fuel. |
+| ⚡ **ERS Deploy** (%) | Activity burst | Ratio of 7-day vs 30-day average activity. >100% when in a burst period. "DEPLOYING" shown when >60%. |
+| 🟢 **DRS** (Open/Closed) | Daily threshold | DRS opens when today's commits > 5. Shows progress toward threshold. |
+| 📈 **Telemetry Chart** | Commit times | Hour-of-day distribution of PushEvent timestamps (UTC) showing when you code. Peak hour highlighted. |
+| 📊 **Stats Bar** | Profile metrics | Stars, Forks, Repos, Followers, and Total Commits from your GitHub profile. |
 
-Notes:
-- Where possible the server uses GraphQL contributions calendar (full-contribution data including private contributions when a token is present) to compute an accurate streak; otherwise it falls back to events/REST (public-only) and computes streak from the last ~90 days of event dates.
-- The speed gauge arc is scaled using speedFraction = min(1, todayCommits / 50) — 50+ commits fills the gauge.
+**Notes:**
+- With a `GITHUB_TOKEN`, the server uses GraphQL for full contribution data (including private repos). Without a token, it falls back to the public Events API.
+- The Events API fallback counts each PushEvent as 1 commit when the payload doesn't include commit details.
+- Speed gauge arc: `speedFraction = min(1, todayCommits / 50)` — 50+ commits fills the gauge.
 
 ---
 
@@ -102,7 +98,7 @@ Notes:
 | `theme` | Color theme | `dark` | `dark`, `ferrari`, `mercedes`, `redbull`, `mclaren`, `alpine`, `aston_martin`, `williams`, `haas`, `sauber` |
 | `hide_border` | Remove card border | `false` | `true` / `false` |
 | `hide_gear` | Hide the gear indicator | `false` | `true` / `false` |
-| `cache_seconds` | Cache duration | `14400` (4h) | `1800` – `86400` |
+| `cache_seconds` | Cache duration | `120` (2min) | `60` – `86400` |
 
 **Full example with all params:**
 ```markdown
@@ -217,10 +213,10 @@ F1-Lap-Dashboard/
 ## 🔧 How It Works
 
 1. **Request** → Your GitHub README loads `<img src="...your-vercel-app.../api/card?username=...">`.
-2. **Fetch** → The serverless function calls the GitHub REST API to get your profile, repos, and recent events.
-3. **Compute** → Raw data is mapped to F1 telemetry metrics (speed, tire wear, fuel, etc.).
+2. **Fetch** → The serverless function calls the GitHub REST + GraphQL APIs to get your profile, repos, events, and contribution calendar.
+3. **Compute** → Raw data is mapped to F1 telemetry metrics (speed, tire wear, fuel, position, ERS, etc.).
 4. **Render** → A beautiful SVG string is generated with CSS animations, gradients, and glow effects.
-5. **Cache** → Response is cached (default 4 hours) so it doesn't spam the GitHub API.
+5. **Cache** → Response is cached (default 2 minutes) so it doesn't spam the GitHub API.
 6. **Display** → GitHub renders the SVG as an image in your profile. 🏁
 
 ---

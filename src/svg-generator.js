@@ -2,11 +2,10 @@ const { getTheme } = require("./themes");
 
 /**
  * Generates the F1 Telemetry Dashboard SVG.
- *
- * Layout:
- *   Row 1: Header (driver name, username, seasons, streak badge)
- *   Row 2: Speedometer (cm/d) | Gear | Lap Times (fastest + recent)
- *   Row 3: Tire Wear | DRS | Stats bar
+ * Layout (850x470):
+ *   Row 1: Header (driver name, position badge, streak badge)
+ *   Row 2: Speedometer | Gear | Lap Times | Tire Wear | DRS
+ *   Row 3: Fuel | ERS | Stats bar
  *   Row 4: Mini Telemetry chart
  */
 function generateSVG(data, options = {}) {
@@ -14,7 +13,7 @@ function generateSVG(data, options = {}) {
   const hideBorder = options.hide_border === "true";
   const hideGear = options.hide_gear === "true";
   const width = 850;
-  const height = 395;
+  const height = 470;
 
   return `
 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" fill="none">
@@ -37,13 +36,13 @@ function generateSVG(data, options = {}) {
   <!-- Header -->
   ${renderHeader(data, theme)}
 
-  <!-- Speedometer (cm/d — commits today) -->
+  <!-- Speedometer -->
   ${renderSpeedometer(data, theme)}
 
   <!-- Gear Indicator -->
   ${hideGear ? "" : renderGearIndicator(data, theme)}
 
-  <!-- Lap Time Panel (fastest + recent) -->
+  <!-- Lap Time Panel -->
   ${renderLapTimePanel(data, theme)}
 
   <!-- Tire Wear -->
@@ -52,8 +51,8 @@ function generateSVG(data, options = {}) {
   <!-- DRS Indicator -->
   ${renderDRSIndicator(data, theme)}
 
-  <!-- Stats Bar -->
-  ${renderStatsBar(data, theme)}
+  <!-- Fuel + ERS + Stats Row -->
+  ${renderSecondaryRow(data, theme)}
 
   <!-- Mini Telemetry Chart -->
   ${renderMiniTelemetry(data, theme)}
@@ -73,6 +72,17 @@ function renderDefs(theme) {
       <stop offset="0%" stop-color="#00cc44" />
       <stop offset="50%" stop-color="#ffcc00" />
       <stop offset="100%" stop-color="#ff2200" />
+    </linearGradient>
+
+    <linearGradient id="fuelGradient" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#ff3333" />
+      <stop offset="50%" stop-color="#ffcc00" />
+      <stop offset="100%" stop-color="#00cc44" />
+    </linearGradient>
+
+    <linearGradient id="ersGradient" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#0066ff" />
+      <stop offset="100%" stop-color="#00d4ff" />
     </linearGradient>
 
     <filter id="glow">
@@ -98,7 +108,7 @@ function renderDefs(theme) {
     </pattern>
 
     <clipPath id="roundedCard">
-      <rect width="850" height="395" rx="12" />
+      <rect width="850" height="470" rx="12" />
     </clipPath>
   `;
 }
@@ -114,17 +124,13 @@ function renderCSS(theme) {
       0%, 100% { opacity: 1; }
       50% { opacity: 0.3; }
     }
-    @keyframes gearShift {
-      0% { transform: scale(1); }
-      50% { transform: scale(1.05); }
-      100% { transform: scale(1); }
-    }
     @keyframes fadeInUp {
       0% { opacity: 0; transform: translateY(8px); }
       100% { opacity: 1; transform: translateY(0); }
     }
-    @keyframes barGrow {
-      0% { width: 0; }
+    @keyframes ersPulse {
+      0%, 100% { opacity: 0.8; }
+      50% { opacity: 1; }
     }
 
     .title { font: bold 14px 'Segoe UI', Ubuntu, Helvetica, Arial, sans-serif; fill: ${theme.title}; }
@@ -138,7 +144,6 @@ function renderCSS(theme) {
     .lap-time-fastest { font: bold 18px 'Consolas', 'Courier New', monospace; fill: ${theme.sectorBest || theme.accent}; filter: url(#glow); }
     .drs-active { fill: ${theme.drsActive}; animation: drsBlink 1s ease-in-out infinite; }
     .drs-inactive { fill: ${theme.drsInactive}; }
-    .panel { fill: ${theme.bgPanel}; rx: 8; }
     .stat-label { font: 500 9px 'Segoe UI', Ubuntu, Helvetica, Arial, sans-serif; fill: ${theme.textSecondary}; }
     .stat-value { font: bold 12px 'Consolas', 'Courier New', monospace; fill: ${theme.text}; }
     .animate-fade { animation: fadeInUp 0.6s ease-out both; }
@@ -146,39 +151,48 @@ function renderCSS(theme) {
     .animate-fade-d2 { animation: fadeInUp 0.6s ease-out 0.2s both; }
     .animate-fade-d3 { animation: fadeInUp 0.6s ease-out 0.3s both; }
     .animate-fade-d4 { animation: fadeInUp 0.6s ease-out 0.4s both; }
+    .position-text { font: bold 28px 'Consolas', 'Courier New', monospace; fill: ${theme.title}; }
+    .interval-text { font: bold 10px 'Consolas', 'Courier New', monospace; }
   `;
 }
 
 // ─── HEADER ────────────────────────────────────────────────────
 function renderHeader(data, theme) {
+  const posColor = data.position <= 3 ? theme.accent : data.position <= 10 ? theme.speed : theme.textSecondary;
+  const intervalStr = data.interval === "LEADER" ? "LEADER" : data.interval + "s";
   return `
     <g class="animate-fade">
       <!-- Driver name -->
       <text x="24" y="30" class="title" style="font-size:15px;">${escapeXml(data.name)}</text>
       <text x="24" y="44" class="label" style="font-size:9px;letter-spacing:1.5px;">@${escapeXml(data.username)} · ${data.accountAgeYears} SEASONS</text>
 
-      <!-- Streak badge (top-right) -->
-      <rect x="710" y="14" width="126" height="30" rx="6" fill="${theme.accent}22" stroke="${theme.accent}" stroke-width="0.5" />
-      <text x="773" y="34" text-anchor="middle" style="font:bold 12px 'Consolas',monospace;fill:${theme.accent};">${data.streak}🔥 ${data.streak}-DAY STREAK</text>
+      <!-- Position badge -->
+      <rect x="540" y="10" width="56" height="38" rx="6" fill="${posColor}22" stroke="${posColor}" stroke-width="1" />
+      <text x="568" y="32" text-anchor="middle" class="position-text" style="fill:${posColor};">P${data.position}</text>
+      <text x="568" y="42" text-anchor="middle" style="font:600 7px 'Segoe UI',sans-serif;fill:${theme.textSecondary};">${intervalStr}</text>
+
+      <!-- Streak badge -->
+      <rect x="608" y="10" width="130" height="38" rx="6" fill="${theme.accent}22" stroke="${theme.accent}" stroke-width="0.5" />
+      <text x="673" y="25" text-anchor="middle" style="font:bold 11px 'Consolas',monospace;fill:${theme.accent};">🔥 ${data.streak}-DAY STREAK</text>
+      <text x="673" y="40" text-anchor="middle" style="font:600 7px 'Segoe UI',sans-serif;fill:${theme.textSecondary};">AVG ${data.weeklyAvg}/DAY</text>
     </g>
   `;
 }
 
 // ─── SPEEDOMETER ───────────────────────────────────────────────
 function renderSpeedometer(data, theme) {
-  const cx = 170;
-  const cy = 175;
-  const r = 90;
+  const cx = 155;
+  const cy = 170;
+  const r = 85;
   const startAngle = -225;
   const endAngle = 45;
-  const totalAngle = endAngle - startAngle; // 270 degrees
+  const totalAngle = endAngle - startAngle;
   const speedFraction = data.speedFraction;
   const activeAngle = startAngle + totalAngle * speedFraction;
 
   const trackPath = describeArc(cx, cy, r, startAngle, endAngle);
   const activePath = describeArc(cx, cy, r, startAngle, activeAngle);
 
-  // Major tick marks (0 to 50)
   const maxGauge = 50;
   const majorSteps = 5;
   const ticks = [];
@@ -201,7 +215,6 @@ function renderSpeedometer(data, theme) {
     `);
   }
 
-  // Minor ticks
   for (let i = 0; i <= 25; i++) {
     const angle = startAngle + (totalAngle / 25) * i;
     const rad = (angle * Math.PI) / 180;
@@ -218,27 +231,20 @@ function renderSpeedometer(data, theme) {
 
   return `
     <g class="animate-fade-d1">
-      <!-- Speedometer background -->
-      <rect x="${cx - 112}" y="55" width="224" height="215" rx="10" fill="${theme.bgPanel}" opacity="0.5" />
+      <rect x="${cx - 105}" y="55" width="210" height="210" rx="10" fill="${theme.bgPanel}" opacity="0.5" />
 
-      <!-- Label -->
       <text x="${cx}" y="73" text-anchor="middle" class="label">COMMITS TODAY</text>
 
-      <!-- Gauge track -->
       <path d="${trackPath}" fill="none" stroke="${theme.gaugeTrack}" stroke-width="12" stroke-linecap="round" />
-
-      <!-- Active gauge -->
       <path d="${activePath}" fill="none" stroke="url(#speedGradient)" stroke-width="12" stroke-linecap="round" filter="url(#glow)" />
 
-      <!-- Tick marks -->
       ${ticks.join("")}
 
-      <!-- Speed value — raw commit count -->
       <text x="${cx}" y="${cy + 8}" text-anchor="middle" class="speed-val">${data.speed}</text>
       <text x="${cx}" y="${cy + 26}" text-anchor="middle" class="unit" style="font-size:10px;">cm/d</text>
 
-      <!-- Year total below -->
-      <text x="${cx}" y="${cy + 78}" text-anchor="middle" class="stat-label">${data.hasGraphQL ? data.yearTotalContributions + " THIS YEAR" : ""}</text>
+      <text x="${cx}" y="${cy + 68}" text-anchor="middle" class="stat-label">${data.weeklyAvg > 0 ? "AVG " + data.weeklyAvg + "/DAY · " + data.weeklyTotal + "/WK" : ""}</text>
+      <text x="${cx}" y="${cy + 82}" text-anchor="middle" class="stat-label">${data.hasGraphQL ? data.yearTotalContributions + " THIS YEAR" : ""}</text>
     </g>
   `;
 }
@@ -247,9 +253,9 @@ function renderSpeedometer(data, theme) {
 function renderGearIndicator(data, theme) {
   return `
     <g class="animate-fade-d2">
-      <rect x="290" y="88" width="60" height="75" rx="8" fill="${theme.bgPanel}" stroke="${theme.border}" stroke-width="1" />
-      <text x="320" y="106" text-anchor="middle" class="label" style="font-size:8px;">GEAR</text>
-      <text x="320" y="150" text-anchor="middle" class="value-xl" style="fill:${theme.speed};filter:url(#glow);">${data.gear}</text>
+      <rect x="275" y="85" width="60" height="75" rx="8" fill="${theme.bgPanel}" stroke="${theme.border}" stroke-width="1" />
+      <text x="305" y="103" text-anchor="middle" class="label" style="font-size:8px;">GEAR</text>
+      <text x="305" y="147" text-anchor="middle" class="value-xl" style="fill:${theme.speed};filter:url(#glow);">${data.gear}</text>
     </g>
   `;
 }
@@ -258,18 +264,15 @@ function renderGearIndicator(data, theme) {
 function renderLapTimePanel(data, theme) {
   return `
     <g class="animate-fade-d2">
-      <rect x="290" y="172" width="200" height="98" rx="8" fill="${theme.bgPanel}" stroke="${theme.border}" stroke-width="1" />
+      <rect x="275" y="170" width="200" height="95" rx="8" fill="${theme.bgPanel}" stroke="${theme.border}" stroke-width="1" />
 
-      <!-- Fastest Lap -->
-      <text x="300" y="192" class="label" style="font-size:8px;">⚡ FASTEST LAP</text>
-      <text x="300" y="214" class="lap-time-fastest">${data.fastestLap}</text>
+      <text x="285" y="190" class="label" style="font-size:8px;">⚡ FASTEST LAP</text>
+      <text x="285" y="212" class="lap-time-fastest">${data.fastestLap}</text>
 
-      <!-- Divider -->
-      <line x1="300" y1="222" x2="480" y2="222" stroke="${theme.border}" stroke-width="0.5" opacity="0.4" />
+      <line x1="285" y1="220" x2="465" y2="220" stroke="${theme.border}" stroke-width="0.5" opacity="0.4" />
 
-      <!-- Recent Lap -->
-      <text x="300" y="240" class="label" style="font-size:8px;">🏁 RECENT LAP</text>
-      <text x="300" y="262" class="lap-time">${data.recentLap}</text>
+      <text x="285" y="238" class="label" style="font-size:8px;">🏁 RECENT LAP</text>
+      <text x="285" y="258" class="lap-time">${data.recentLap}</text>
     </g>
   `;
 }
@@ -277,12 +280,11 @@ function renderLapTimePanel(data, theme) {
 // ─── TIRE WEAR ─────────────────────────────────────────────────
 function renderTireWear(data, theme) {
   const wear = data.tireWear;
-
   const tires = [
-    { label: "FL", x: 520, y: 63, wear: Math.min(100, wear + 5) },
-    { label: "FR", x: 580, y: 63, wear: Math.min(100, wear + 2) },
-    { label: "RL", x: 520, y: 115, wear: Math.max(0, wear - 3) },
-    { label: "RR", x: 580, y: 115, wear: Math.max(0, wear - 8) },
+    { label: "FL", x: 505, y: 63, wear: Math.min(100, wear + 5) },
+    { label: "FR", x: 565, y: 63, wear: Math.min(100, wear + 2) },
+    { label: "RL", x: 505, y: 115, wear: Math.max(0, wear - 3) },
+    { label: "RR", x: 565, y: 115, wear: Math.max(0, wear - 8) },
   ];
 
   const tireElements = tires
@@ -303,8 +305,8 @@ function renderTireWear(data, theme) {
 
   return `
     <g class="animate-fade-d2">
-      <rect x="510" y="48" width="120" height="118" rx="8" fill="${theme.bgPanel}" opacity="0.5" />
-      <text x="570" y="61" text-anchor="middle" class="label" style="font-size:8px;">TIRE WEAR (PR MERGE RATE)</text>
+      <rect x="495" y="48" width="120" height="118" rx="8" fill="${theme.bgPanel}" opacity="0.5" />
+      <text x="555" y="61" text-anchor="middle" class="label" style="font-size:8px;">TIRE WEAR (PR MERGE)</text>
       ${tireElements}
     </g>
   `;
@@ -315,42 +317,46 @@ function renderDRSIndicator(data, theme) {
   const active = data.drsActive;
   return `
     <g class="animate-fade-d3">
-      <rect x="645" y="48" width="100" height="118" rx="8" fill="${theme.bgPanel}" opacity="0.5" />
-      <text x="695" y="66" text-anchor="middle" class="label" style="font-size:8px;">DRS</text>
+      <rect x="625" y="48" width="100" height="118" rx="8" fill="${theme.bgPanel}" opacity="0.5" />
+      <text x="675" y="66" text-anchor="middle" class="label" style="font-size:8px;">DRS</text>
 
-      <!-- DRS Zone indicator -->
-      <rect x="660" y="75" width="70" height="28" rx="6" fill="${active ? theme.drsActive : theme.drsInactive}" opacity="${active ? 1 : 0.4}" ${active ? 'class="drs-active"' : ""} />
-      <text x="695" y="94" text-anchor="middle" style="font:bold 12px 'Segoe UI',sans-serif;fill:${active ? theme.bg : theme.textSecondary};">${active ? "OPEN" : "CLOSED"}</text>
+      <rect x="640" y="75" width="70" height="28" rx="6" fill="${active ? theme.drsActive : theme.drsInactive}" opacity="${active ? 1 : 0.4}" ${active ? 'class="drs-active"' : ""} />
+      <text x="675" y="94" text-anchor="middle" style="font:bold 12px 'Segoe UI',sans-serif;fill:${active ? theme.bg : theme.textSecondary};">${active ? "OPEN" : "CLOSED"}</text>
 
-      <!-- Threshold label -->
-      <text x="695" y="120" text-anchor="middle" class="stat-label" style="font-size:7px;">${active ? "5+ COMMITS TODAY" : "NEED 5+ COMMITS"}</text>
+      <text x="675" y="120" text-anchor="middle" class="stat-label" style="font-size:7px;">${active ? "5+ COMMITS TODAY" : "NEED 5+ COMMITS"}</text>
 
-      <!-- Commit count badge -->
-      <rect x="672" y="132" width="46" height="16" rx="4" fill="${active ? theme.accent + "33" : theme.bgSecondary}" />
-      <text x="695" y="144" text-anchor="middle" style="font:bold 9px 'Consolas',monospace;fill:${active ? theme.accent : theme.textSecondary};">${data.todayCommits}/5</text>
+      <rect x="652" y="132" width="46" height="16" rx="4" fill="${active ? theme.accent + "33" : theme.bgSecondary}" />
+      <text x="675" y="144" text-anchor="middle" style="font:bold 9px 'Consolas',monospace;fill:${active ? theme.accent : theme.textSecondary};">${data.todayCommits}/5</text>
     </g>
   `;
 }
 
-// ─── STATS BAR ─────────────────────────────────────────────────
-function renderStatsBar(data, theme) {
+// ─── SECONDARY ROW: Fuel + ERS + Stats ─────────────────────────
+function renderSecondaryRow(data, theme) {
+  const fuelW = 150;
+  const fuelFill = (fuelW * data.fuelLevel) / 100;
+  const fuelColor = data.fuelLevel > 60 ? "#00cc44" : data.fuelLevel > 30 ? "#ffcc00" : "#ff3333";
+
+  const ersW = 120;
+  const ersFill = (ersW * data.ersPercent) / 100;
+
   const stats = [
     { label: "STARS", value: data.totalStars },
     { label: "FORKS", value: data.totalForks },
     { label: "REPOS", value: data.publicRepos },
     { label: "FOLLOWERS", value: data.followers },
+    { label: "COMMITS", value: data.totalCommits },
   ];
 
-  const barWidth = 340;
-  const itemW = barWidth / stats.length;
-
-  const items = stats
+  const statsStartX = 485;
+  const itemW = 72;
+  const statItems = stats
     .map((s, i) => {
-      const x = 510 + i * itemW;
+      const x = statsStartX + i * itemW;
       return `
       <g>
-        <text x="${x + 8}" y="195" class="stat-label">${s.label}</text>
-        <text x="${x + 8}" y="212" class="stat-value" style="fill:${theme.accent};">${formatNumber(s.value)}</text>
+        <text x="${x}" y="296" class="stat-label">${s.label}</text>
+        <text x="${x}" y="312" class="stat-value" style="fill:${theme.accent};">${formatNumber(s.value)}</text>
       </g>
     `;
     })
@@ -358,8 +364,24 @@ function renderStatsBar(data, theme) {
 
   return `
     <g class="animate-fade-d3">
-      <rect x="500" y="175" width="${barWidth + 10}" height="46" rx="8" fill="${theme.bgPanel}" opacity="0.4" />
-      ${items}
+      <!-- Fuel Gauge -->
+      <rect x="15" y="275" width="210" height="42" rx="8" fill="${theme.bgPanel}" opacity="0.4" />
+      <text x="25" y="290" class="label" style="font-size:8px;">⛽ FUEL (STREAK ${data.streak}d/30d)</text>
+      <rect x="25" y="298" width="${fuelW}" height="10" rx="4" fill="${theme.gaugeTrack}" />
+      <rect x="25" y="298" width="${fuelFill}" height="10" rx="4" fill="url(#fuelGradient)" opacity="0.9" />
+      <text x="${25 + fuelW + 8}" y="307" style="font:bold 10px 'Consolas',monospace;fill:${fuelColor};">${data.fuelLevel}%</text>
+
+      <!-- ERS Bar -->
+      <rect x="240" y="275" width="230" height="42" rx="8" fill="${theme.bgPanel}" opacity="0.4" />
+      <text x="250" y="290" class="label" style="font-size:8px;">⚡ ERS DEPLOY (7D vs 30D BURST)</text>
+      <rect x="250" y="298" width="${ersW}" height="10" rx="4" fill="${theme.gaugeTrack}" />
+      <rect x="250" y="298" width="${ersFill}" height="10" rx="4" fill="url(#ersGradient)" opacity="0.9" ${data.ersActive ? 'style="animation: ersPulse 1.5s ease-in-out infinite;"' : ""} />
+      <text x="${250 + ersW + 8}" y="307" style="font:bold 10px 'Consolas',monospace;fill:${data.ersActive ? "#00d4ff" : theme.textSecondary};">${data.ersPercent}%</text>
+      ${data.ersActive ? `<text x="430" y="307" style="font:bold 8px 'Segoe UI',sans-serif;fill:#00d4ff;">DEPLOYING</text>` : ""}
+
+      <!-- Stats Bar -->
+      <rect x="${statsStartX - 10}" y="275" width="380" height="42" rx="8" fill="${theme.bgPanel}" opacity="0.4" />
+      ${statItems}
     </g>
   `;
 }
@@ -367,9 +389,9 @@ function renderStatsBar(data, theme) {
 // ─── MINI TELEMETRY CHART ──────────────────────────────────────
 function renderMiniTelemetry(data, theme) {
   const chartX = 25;
-  const chartY = 290;
+  const chartY = 340;
   const chartW = 800;
-  const chartH = 70;
+  const chartH = 85;
 
   const hours = data.hourDistribution;
   const maxH = Math.max(...hours, 1);
